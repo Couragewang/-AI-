@@ -9,11 +9,13 @@
 #include <sstream>
 #include <memory>
 #include <json/json.h>
+#include "log.hpp"
 #include "speech.h"
 #include "base/http.h"
 
 #define VOICE_PATH "voice"
 #define SPEECH_ASR "asr.wav"
+#define SPEECH_TTL "ttl.mp3"
 #define CMD_ETC "command.etc"
 #define SIZE 1024
 
@@ -37,7 +39,7 @@ class TuLing{
             std::unique_ptr<Json::CharReader> const jsonReader(rb.newCharReader());
             bool res = jsonReader->parse(str.data(), str.data()+str.size(), &root, &errs);
             if(!res || !errs.empty()){
-                cout << "jsoncpp parse error" << endl;
+                LOG(Warning, "jsoncpp parse error");
                 return errs;
             }
             Json::Value results = root["results"];
@@ -72,7 +74,7 @@ class TuLing{
             string response;
             int code = client.post(url, nullptr, body, nullptr, &response);
             if(code != CURLcode::CURLE_OK){
-                cout << "http request error!" << endl;
+                LOG(Waring, "http request error!");
                 return "";
             }
             return ResponsePickup(response);
@@ -90,15 +92,18 @@ class Jarvis{
         string apikey = "vsIVduroBspw1zrUcp3GzZiR";
         string secretkey = "NCdooNRZENogQ2hxeQnnosx2Q2uuEMXp";
 
-        unordered_map<string, string> cmd_set;
+        string record; //
+        string play;
+        unordered_map<string, string> record_set;
     public:
         Jarvis():client(nullptr){
         }
         void LoadCommandEtc(){
+            LOG(Normal, "command etc load begin!");
             string name = CMD_ETC;
             ifstream in(name);
             if(!in.is_open()){
-                cout << "Load command etc error" << endl;
+                LOG(Warning, "Load command etc error");
                 exit(1);
             }
             char line[SIZE];
@@ -107,36 +112,48 @@ class Jarvis{
                 string str = line;
                 size_t pos = str.find(sep);
                 if(pos == string::npos){
-                    cout << "command ect format error" << endl;
+                    LOG(Warning,"command ect format error");
                     break;
                 }
                 string key = str.substr(0, pos);
                 string value = str.substr(pos+sep.size());
-                cmd_set.insert({key, value});
+                key += "。"; //语音识别能够对比成功
+
+                record_set.insert({key, value});
             }
             in.close();
+            LOG(Normal, "command etc load success!");
         }
         void Init(){
             client = new aip::Speech(appid, apikey, secretkey);
-            cout << "load command etc ... ing" << endl;
             LoadCommandEtc();
-            cout << "load command etc ... done" << endl;
+
+            record = "arecord -t wav -c 1 -r 16000 -d 5 -f S16_LE ";
+            record += VOICE_PATH;
+            record += "/";
+            record += SPEECH_ASR;
+            record += ">/dev/null 2>&1";
+
+
+            play = "cvlc --play-and-exit ";
+            play += VOICE_PATH;
+            play += "/";
+            play += SPEECH_TTL;
+            play += ">/dev/null 2>&1";
         }
-        bool Exec(string cmd, bool is_print){
-            FILE *fp = popen(cmd.c_str(), "r");
+        bool Exec(string command, bool is_print){
+            FILE *fp = popen(command.c_str(), "r");
             if(nullptr == fp){
                 cout << "popen error!" << endl;
                 return false;
             }
 
-            string result;
             if(is_print){
                 char c;
                 size_t s = 0;
                 while((s = fread(&c, 1, 1, fp)) > 0){
-                    result.push_back(c);
+                    cout << c;
                 }
-                cout << result << endl;
             }
 
             pclose(fp);
@@ -166,29 +183,66 @@ class Jarvis{
             
             return RecognizePickup(root);
         }
+        bool TTL(aip::Speech *client, std::string &str)
+        {
+            ofstream ofile;
+            string ttl = VOICE_PATH;
+            ttl += "/";
+            ttl += SPEECH_TTL;
+            ofile.open(ttl.c_str(), ios::out | ios::binary);
+
+            string file_ret;
+            map<string, string> options;
+
+            options["spd"] = "6";
+            options["per"] = "4";
+            options["vol"] = "8";
+
+            Json::Value result = client->text2audio(str, options, file_ret);
+            if(!file_ret.empty()){
+                ofile << file_ret;
+            }
+            else{
+                cout << result.toStyledString() << endl;
+            }
+            ofile.close();
+        }
+        
+        bool IsCommand(std::string &message)
+        {
+            return record_set.find(message) != record_set.end() ? true : false;
+        }
 
         void Run(){
-            string cmd = "arecord -t wav -c 1 -r 16000 -d 5 -f S16_LE ";
-            cmd += VOICE_PATH;
-            cmd += "/";
-            cmd += SPEECH_ASR;
-            cmd += ">/dev/null 2>&1";
             for(;;){
-                cout << "讲话中...";
+                LOG(Normal, "....................................讲话中");
                 fflush(stdout);
-                if(Exec(cmd, false)){
-                    cout << endl;
-                    cout << "识别中...";
-                    fflush(stdout);
+                if(Exec(record, false)){
+                    LOG(Normal, ".....................................识别中");
                     string message = ASR(client);
-                    if(message == "退出。"){
-                        cout << "好的" << endl;
-                        break;
-                    }
                     cout << endl;
-                    cout << "我# " << message << endl;
-                    string echo = tl.Chat(message);
-                    cout << "贾维斯# " << echo << endl;
+                    LOG(Normal, message);
+                    //if("退出." )
+                    if(IsCommand(message)){
+                        //是命令
+                        LOG(Normal, "Exec a command!");
+                        if(record_set[message] == "quit"){
+                            break;
+                        }
+                        Exec(record_set[message], true);
+                        continue;
+                    }
+                    else{
+                        //不是命令    
+                        LOG(Normal, "run a normal chat!");
+                        //cout << "我# " << message << endl;
+                        string echo = tl.Chat(message);
+                        LOG(Normal, echo);
+                        //cout << "贾维斯# " << echo << endl;
+                        TTL(client, echo);
+                        Exec(play, false);
+                        //text to mp3
+                    }
                 }
             }
         }

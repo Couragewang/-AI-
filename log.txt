@@ -1,0 +1,12 @@
+[ Normal ][1595335137][command etc load begin! ][ jarvis.hpp][ 102]
+[ Normal ][1595335137][command etc load success! ][ jarvis.hpp][ 125]
+[ Normal ][1595335137][....................................讲话中 ][ jarvis.hpp][ 218]
+[ Normal ][1595335142][.....................................识别中 ][ jarvis.hpp][ 221]
+
+[ Normal ][1595335144][老同学们，从这个时候开始呢，我们所形成的所有的日志呢？ ][ jarvis.hpp][ 224]
+[ Normal ][1595335144][run a normal chat! ][ jarvis.hpp][ 234]
+[ Normal ][1595335147][....................................讲话中 ][ jarvis.hpp][ 218]
+[ Normal ][1595335153][.....................................识别中 ][ jarvis.hpp][ 221]
+
+[ Normal ][1595335154][就都不会被显示了哈哈，但是呢，这个时候呢，他这个假如一次其实是一只。 ][ jarvis.hpp][ 224]
+[ Normal ][1595335154][run a normal chat! ][ jarvis.hpp][ 234]
